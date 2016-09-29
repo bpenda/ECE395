@@ -10,10 +10,14 @@
 //=============================================================================
 void SSD1963_WriteCommand(unsigned int commandToWrite)
 {
+	//SET DATA to command to write
 SSD1963_DATAPORT->ODR  = commandToWrite;
+	//set bit 0
 SSD1963_CTRLPORT->BSRR = SSD1963_PIN_RD;
+	//clear bit 3,2,1
 SSD1963_CTRLPORT->BRR  = SSD1963_PIN_A0 | SSD1963_PIN_CS | SSD1963_PIN_WR;
 asm("nop");
+	//set bit 3,2,1
 SSD1963_CTRLPORT->BSRR = SSD1963_PIN_A0 | SSD1963_PIN_CS | SSD1963_PIN_WR;
 }
 //=============================================================================
@@ -22,9 +26,12 @@ SSD1963_CTRLPORT->BSRR = SSD1963_PIN_A0 | SSD1963_PIN_CS | SSD1963_PIN_WR;
 void SSD1963_WriteData(unsigned int dataToWrite)
 {
 SSD1963_DATAPORT->ODR  = dataToWrite;
+	//set bit 0,3
 SSD1963_CTRLPORT->BSRR = SSD1963_PIN_RD | SSD1963_PIN_A0;
+	//clear bit 2,1
 SSD1963_CTRLPORT->BRR  = SSD1963_PIN_CS | SSD1963_PIN_WR;
 asm("nop");
+	//set bit 2,1
 SSD1963_CTRLPORT->BSRR = SSD1963_PIN_CS | SSD1963_PIN_WR;
 }
 //=============================================================================
@@ -33,11 +40,13 @@ SSD1963_CTRLPORT->BSRR = SSD1963_PIN_CS | SSD1963_PIN_WR;
 void SSD1963_Init (void)
 {
 volatile unsigned int dly;
+	//set bit 4
 SSD1963_CTRLPORT->BRR = SSD1963_PIN_RST;
 for(dly = 0; dly < 1000; dly++);
+	//clear bit 4
 SSD1963_CTRLPORT->BSRR = SSD1963_PIN_RST;
 for(dly = 0; dly < 1000; dly++);
-
+	
 SSD1963_WriteCommand(SSD1963_SOFT_RESET);
 
 SSD1963_WriteCommand(SSD1963_SET_PLL_MN);
