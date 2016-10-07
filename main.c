@@ -2,6 +2,7 @@
 #include "LPC11xx.h"
 #include "ssd1963.h"
 #include <rt_misc.h>
+#include <stdlib.h>     /* malloc, free, rand */
 
 #define SSD1963_PIN_RD	(1 << 4)
 #define SSD1963_PIN_WR	(1 << 9)
@@ -222,37 +223,36 @@ for(i = 0; i < ((ex-sx+1)*(ey-sy+1)); i++)
 int main()
 {
 	int i;
-	//SER_init();
+	SER_init();
 	configureGPIO();
 	//configGPIOread();
 	//LPC_GPIO0->DATA |= 0xFF;
 	/*
 	//This test is used for checking if SSD1963 is responding by setting tear status
-	
 	SSD1963_WriteData(0x00);
 	SSD1963_WriteCommand(SSD1963_GET_TEAR_EFFECT_STATUS);
-	__asm{
-		nop
-	}
 	configGPIOread();
 	LPC_GPIO1 ->DATA &= ~SSD1963_PIN_RD ;
 	LPC_GPIO1 ->DATA |= SSD1963_PIN_DC ;
 	*/
-	//SSD1963_WriteCommand(SSD1963_SET_TEAR_OFF);
-	//SSD1963_WriteCommand(SSD1963_ENTER_INVERT_MODE);
+	
 	SSD1963_Init();
-	SSD1963_FillArea(0,300,0,300,0x292929);
+	//CLEAR SCREEN
+	SSD1963_FillArea(0,799,0,479,0xFFFFFF);
+	
 	
 	while (1)
 	{
 		//ledOn();
-		//char val[20];
-		//printf("Testing\n");
-		//scanf("%s",val);
+		int val;
+		//BLINKING PURPLE AND GREEN
+		SSD1963_FillArea(200,400,200,400,0xFF00FF);
+
 		for (i = 0; i < 0x0007FFFF; i++)
 		{
 		}
-		//printf("Value entered: %s\n",val);
+		SSD1963_FillArea(200,400,200,400,0x00FF00);
+		//printf("Value entered %x\n",val);
 		//ledOff();
 		for (i = 0; i < 0x0007FFFF; i++)
 		{
