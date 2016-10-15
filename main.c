@@ -3,6 +3,7 @@
 #include "ssd1963.h"
 #include <rt_misc.h>
 #include <stdlib.h>     /* malloc, free, rand */
+#include <string.h>
 
 #define SSD1963_PIN_RD	(1 << 4)
 #define SSD1963_PIN_WR	(1 << 9)
@@ -48,8 +49,9 @@ void ledOff()
 	LPC_GPIO0->MASKED_ACCESS[(1<<7)] = 1 << 7;
 }
 
-void SSD1963_WriteCommand(unsigned int commandToWrite){
-	LPC_GPIO0->DATA = (commandToWrite << 1) | (LPC_GPIO0->DATA & 0x1);
+__inline void SSD1963_WriteCommand(unsigned int commandToWrite){
+//	LPC_GPIO0->DATA = (commandToWrite << 1) | (LPC_GPIO0->DATA & 0x1);
+	LPC_GPIO0->MASKED_ACCESS[0x1FE] = commandToWrite<<1;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD] = SSD1963_PIN_RD ;
 	LPC_GPIO1->DATA &= ~SSD1963_PIN_DC & ~SSD1963_PIN_WR;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
@@ -209,71 +211,83 @@ void GLCD_SetPixel(int x, int y, int color)
 	SSD1963_WriteData(color & 0xFF);SSD1963_WriteCommand(0x0);*/
 }
 volatile uint32_t color = 0x0FFF0F;
-unsigned char a_char[28] = {
-	//A
-		0x18, 0x3C, 
-		0x7E, 0xE7, 
-		0xC3, 0x81, 
-		0x81, 0x81, 
-		0xFF, 0x81, 
-		0x81, 0x81, 
-		0x81, 0x81, 
-	//B
-		0xFC,	0xFE,
-		0xC7,	0xC3,
-		0xC3,	0xC7,
-		0xFE,	0xFE,
-		0xC7,	0xC3,
-		0xC3,	0xC7,
-		0xFE,	0xFC
-	// C
-};
 
-void draw_circle(uint8_t rad, uint8_t border, uint16_t center_x, uint16_t center_y, uint32_t color){
+void draw_circle(uint8_t rad, uint8_t border, uint16_t center_x, uint16_t center_y, uint32_t color, uint32_t bgcolor){
 	int i,j;
+	int bound = rad*rad;
+	int bound2 = (rad-border)*(rad-border);
 	SSD1963_SetArea(center_x-rad, center_x+rad-1, center_y-rad, center_y+rad-1);
 	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
 	for (i = 0; i < rad*2; i++){
 		for (j = 0; j < rad*2; j++){
 			int distance = abs(i-rad)*abs(i-rad) + abs(j-rad)*abs(j-rad);
-			if (distance <= rad*rad && distance >= (rad-border)*(rad-border)){
-
+			if (distance <= bound && distance >= bound2){
 				SSD1963_WriteData(color >> 16);
 				SSD1963_WriteData((color >> 8)&0xFF);
 				SSD1963_WriteData(color & 0xFF);
 			}
 			else{
-				SSD1963_WriteData(0xFF);
-				SSD1963_WriteData(0xFF);
-				SSD1963_WriteData(0xFF);
+				SSD1963_WriteData(bgcolor >> 16);
+				SSD1963_WriteData((bgcolor >> 8)&0xFF);
+				SSD1963_WriteData(bgcolor & 0xFF);
 			}
 			
 		}
 	}
 }
 
-
 void draw_letter(unsigned char c, uint32_t color, uint16_t size, uint16_t start_x, uint16_t start_y){
-	int i,j;
-	char offset = (c - 'a')*14;
-	if (start_x + size*8 > 479 || start_y + size*8 > 799)
+	int32_t i,j;
+	int offset = (c - ' ')*16;
+	if (start_x + size*8 > 799 || start_y + size*8 > 479)
 		return;
-	for (j = 0; j < 14; j++){
-		for (i = 0; i < 8; i++){
-			if (((a_char[j+offset]>>i) & 0x1) == 1){
-				SSD1963_FillArea(start_y+(7-i)*size,start_y+(8-i)*size,start_x+(j-1)*size,start_x+j*size, color);
+	SSD1963_SetArea(start_x, start_x+8*size-1, start_y, start_y+16*size -1);
+	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
+	for (j = 0; j < 16*size; j++){
+		for (i = 8*size-1 ; i >= 0; i--){
+			if (((font_rom[j/size+offset]>>i/size) & 0x1) == 1){
+				SSD1963_WriteData(color >> 16);
+				SSD1963_WriteData((color >> 8)&0xFF);
+				SSD1963_WriteData(color & 0xFF);
+				//SSD1963_FillArea(start_y+(7-i)*size,start_y+(8-i)*size,start_x+(j-1)*size,start_x+j*size, color);
 			}
 			else{
-				SSD1963_FillArea(start_y+(7-i)*size,start_y+(8-i)*size,start_x+(j-1)*size,start_x+j*size, 0xFFFFFF);
+				SSD1963_WriteData(0xFF);
+				SSD1963_WriteData(0xFF);
+				SSD1963_WriteData(0xFF);
+				//SSD1963_FillArea(start_y+(7-i)*size,start_y+(8-i)*size,start_x+(j-1)*size,start_x+j*size, 0xFFFFFF);
 			}
 		}
 	}
 }	
 	
-	
+
+void print_string(char* str, uint32_t color, uint16_t size,uint16_t start_x, uint16_t start_y){
+	unsigned int len = strlen(str);
+	unsigned int i,x,y;
+	x = start_x;
+	y = start_y;
+	for (i = 0; i < len; i++){
+		if (str[i] != ' '){
+			draw_letter(str[i],color, size, x, y);
+			x += 8*size+2;}
+		else{
+			x += size*4;
+		}
+		if (x >= 780){
+			x = 0;
+			y+= 16*size;
+		}		
+	}
+	return;
+}
+
 int main()
 {
-	int i,j;
+	int i;
+	int j = 8;
+	int cx = 60;
+	int cy = 240;
 	configureGPIO();
 	SER_init();
 /*
@@ -290,27 +304,48 @@ int main()
 	SSD1963_FillArea(0,799,0,479,0xFFFFFF);
 	//SSD1963_FillArea(150,200,150,200,0x000000);
 	//SSD1963_FillArea(200,215,200,227,0xFF0000);
-	/*draw_letter('a', 0xFF00FF, 2, 100, 200);
-	draw_letter('b', 0xFF00FF, 2, 100, 220);
-	draw_letter('b', 0xFF00FF, 2, 100, 240);
+	print_string("I have become self aware, feed me some data", 0xFF0000, 3, 10, 10);
+	//draw_letter('W', 0xFF00FF, 3, 100, 200);
+	//draw_letter('B', 0xFF00FF, 3, 104, 200);
+	/*draw_letter('b', 0xFF00FF, 2, 100, 240);
 	draw_letter('a', 0xFF00FF, 2, 100, 260);
-	*/
-	draw_circle(150, 150, 400, 240, 0xFF0000);
 	
+	
+	draw_circle(30, 30, 325, 165, 0x000000,0xFFFF00);
+	draw_circle(30, 30, 475, 165, 0x000000,0xFFFF00);
+	draw_circle(50, 50, 400, 300, 0x000000,0xFFFF00);
+	*/
+	//SSD1963_WriteCommand(SSD1963_SET_DISPLAY_OFF);
+	//for (i =0; i< 0x1ffff; i++);
+	
+	//draw_circle(40, 40, 50, 240,0xFF0000,0xFFFFFF);
+			SSD1963_WriteCommand(SSD1963_NOP);
+	//	SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);
 	while (1)
 	{
-		//SSD1963_WriteCommand(SSD1963_ENTER_INVERT_MODE);		
-		/*for (i =0; i< 0x3ffff; i++){
-		}*/
-		for (i =0; i< 0x3ffff; i++){
-				for (j =0; j< 0x13; j++);
-		}
+		//SSD1963_WriteCommand(SSD1963_ENTER_IDLE_MODE);
+		//draw_circle(40,40, cx, cy,0xFFFFFF, 0xFFFFFF);
 		
+		/*
+		SSD1963_WriteCommand(SSD1963_SET_DISPLAY_OFF);
+		for (i =0; i< 0x1ffff; i++);
+		if (cx >= 720)
+			j = -4;
+		if (cx <= 40)
+			j = 4;
+		cx += j;
+		draw_circle(40,40, cx, cy,0xFF0000, 0xFFFFFF);
+		SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);
+		*/
+		
+	
+		for (i =0; i< 0x3ffff; i++){
+				
+		}
 		//SSD1963_WriteCommand(SSD1963_EXIT_INVERT_MODE);		
 		//SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);		
-		for (i =0; i< 0x3ffff; i++){
-			for (j =0; j< 0x13; j++);
-		}
+		
 	}
 }
+
 
