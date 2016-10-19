@@ -2,6 +2,8 @@
 #pip import praw
 
 from time import gmtime, strftime
+from subprocess import call
+import os.path
 import pyowm
 import praw
 
@@ -13,6 +15,18 @@ REDDIT_SECRET = "vv24h5SBYahhn-L-_hApDFQvCKk"
 REDDIT_USER = "python:SmartMirrorServer:v1.0 (by /u/JamMore)"
 SUBREDDIT = "news"
 
+SCREEN_SESSION = "mirror"
+USB_PATH = "/dev/tty.usbserial-A50285BI"
+BT_PATH = "/dev/tty.HC-06-DevB"
+UART_PATH = BT_PATH
+BAUD_RATE = 115200
+
+def connectUART():
+    call("screen -S " + SCREEN_SESSION + " -d -m " + UART_PATH + " " + str(BAUD_RATE), shell=True)
+def printUART(message):
+    call("screen -S " + SCREEN_SESSION + ' -p 0 -X stuff "' + message + '\n"', shell=True)
+def disconnectUART():
+    call("screen -S " + SCREEN_SESSION + " -X quit", shell=True)
 
 def getDateTime():
     return strftime("%Y-%m-%d %H:%M", gmtime()) 
@@ -36,6 +50,14 @@ def getInfo():
     return info
 
 def server(): 
+    if os.path.isfile(USB_PATH):
+        UART_PATH = USB_PATH
+    else:
+        UART_PATH = BT_PATH
+
     print getInfo()
+    connectUART()
+    printUART("Hello world!")
+    disconnectUART()
 
 server()
