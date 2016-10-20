@@ -11,50 +11,55 @@
 #define SSD1963_PIN_DC	(1 << 8)
 
 extern void SER_init(void);
+extern int getkey(void);
+volatile char hr = 0, min = 0,sec = 0;
 void configureGPIO()
 {
 	//Convert I2C to GPIO?
-	//LPC_SYSCON->SYSAHBCLKCTRL |= (0x1UL << 16);  /* enable clock for IOCON      */
-	//LPC_IOCON->PIO0_4 &= ~(1<<1) & ~(1<<0);   
-	//LPC_IOCON->PIO0_4 |= (1<<8);
-        //LPC_IOCON->PIO0_5 &= ~(1<<1) & ~(1<<0);  
-	//LPC_IOCON->PIO0_5 |= (1<<8);
-	//LPC_SYSCON->SYSAHBCLKCTRL &= ~(0x1UL << 16);  /* disable clock for IOCON      */
-	LPC_SYSCON->SYSAHBCLKCTRL |= 1 << 9 | 1 << 8;
+	/*
+	LPC_SYSCON->SYSAHBCLKCTRL |= (0x1UL << 16);  // enable clock for IOCON
+	LPC_IOCON->PIO0_4 &= ~(1<<1) & ~(1<<0);   
+	LPC_IOCON->PIO0_4 |= (1<<8);
+  LPC_IOCON->PIO0_5 &= ~(1<<1) & ~(1<<0);  
+	LPC_IOCON->PIO0_5 |= (1<<8);
+	LPC_SYSCON->SYSAHBCLKCTRL &= ~(0x1UL << 16);  // disable clock for IOCON      */
+	
 	//1 to 8 as output or 0xF
+	LPC_SYSCON->SYSAHBCLKCTRL |= 1 << 9 | 1 << 8;
 	LPC_GPIO0->DIR = 0x1FE;
 	//4 5 9 8
 	LPC_GPIO1->DIR |= SSD1963_PIN_RD | SSD1963_PIN_WR | SSD1963_PIN_RST | SSD1963_PIN_DC;
 }
 
-void configGPIOread(){
+unsigned char SSD1963_ReadData(){
+	unsigned char result;
+	LPC_GPIO1->DATA  |= SSD1963_PIN_WR | SSD1963_PIN_DC;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD] = ~SSD1963_PIN_WR;
+	result = (LPC_GPIO0->DATA >> 1) & 0xFF;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD]  = SSD1963_PIN_RD;
+	return result;
+}
+
+__inline void configGPIOread(){
 	LPC_GPIO0->DIR = 0x00;
 }
 
-void ledOn()
-{
-	LPC_GPIO0->MASKED_ACCESS[(1<<7)] = ~(1<<7);
+__inline void configGPIOwrite(){
+	LPC_GPIO0->DIR = 0x1E;
 }
 
-void ledOff()
-{						 
-	//LPC_GPIO0->DATA |= (1<<7);
-	LPC_GPIO0->MASKED_ACCESS[(1<<7)] = 1 << 7;
-}
-
-__inline void SSD1963_WriteCommand(unsigned int commandToWrite){
+void SSD1963_WriteCommand(unsigned int commandToWrite){
 //	LPC_GPIO0->DATA = (commandToWrite << 1) | (LPC_GPIO0->DATA & 0x1);
 	LPC_GPIO0->MASKED_ACCESS[0x1FE] = commandToWrite<<1;
-	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD] = SSD1963_PIN_RD ;
+	//LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD] = SSD1963_PIN_RD ;
 	LPC_GPIO1->DATA &= ~SSD1963_PIN_DC & ~SSD1963_PIN_WR;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
 }
 
-
-void SSD1963_WriteData(unsigned int dataToWrite)
-{
+void SSD1963_WriteData(unsigned int dataToWrite){
 	LPC_GPIO0->DATA = (dataToWrite << 1) | (LPC_GPIO0->DATA & 0x1);
-	LPC_GPIO1->DATA  |= SSD1963_PIN_RD | SSD1963_PIN_DC;
+	//LPC_GPIO1->DATA  |= SSD1963_PIN_RD | SSD1963_PIN_DC;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_DC]  = SSD1963_PIN_DC;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = ~SSD1963_PIN_WR;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
 }
@@ -165,7 +170,6 @@ void SSD1963_Init (void)
 	SSD1963_WriteData(0x00);
 	*/
 	SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);		//SET display on
-	//PIXEL CLOCK IS CURRENTLY WRONG!
 }
 
 void SSD1963_SetArea(unsigned int sx, unsigned int ex, unsigned int sy, unsigned int ey)
@@ -209,6 +213,7 @@ void draw_circle(uint8_t rad, uint8_t border, uint16_t center_x, uint16_t center
 	int i,j;
 	int bound = rad*rad;
 	int bound2 = (rad-border)*(rad-border);
+	//char flag = 0;
 	SSD1963_SetArea(center_x-rad, center_x+rad-1, center_y-rad, center_y+rad-1);
 	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
 	for (i = 0; i < rad*2; i++){
@@ -220,6 +225,9 @@ void draw_circle(uint8_t rad, uint8_t border, uint16_t center_x, uint16_t center
 				SSD1963_WriteData(color & 0xFF);
 			}
 			else{
+				//if (flag == 0)
+				//	flag = 1;
+				
 				SSD1963_WriteData(bgcolor >> 16);
 				SSD1963_WriteData((bgcolor >> 8)&0xFF);
 				SSD1963_WriteData(bgcolor & 0xFF);
@@ -232,6 +240,8 @@ void draw_circle(uint8_t rad, uint8_t border, uint16_t center_x, uint16_t center
 void draw_letter(unsigned char c, uint32_t color, uint16_t size, uint16_t start_x, uint16_t start_y){
 	int32_t i,j;
 	int offset = (c - ' ')*16;
+	if (c < ' ')
+		return;
 	if (start_x + size*8 > 799 || start_y + size*8 > 479)
 		return;
 	SSD1963_SetArea(start_x, start_x+8*size-1, start_y, start_y+16*size -1);
@@ -254,29 +264,6 @@ void draw_letter(unsigned char c, uint32_t color, uint16_t size, uint16_t start_
 	}
 }	
 	
-//This function initialize a timer that trigger every 1 second
-void timer_init(){
-  LPC_TMR32B0->TCR = 0x02;		/* reset timer */
-  LPC_TMR32B0->PR  = 0x00;		/* set prescaler to zero */
-  LPC_TMR32B0->MR0 = 1000 * ((SystemCoreClock/(LPC_TMR32B0->PR+1)) / 1000);
-  LPC_TMR32B0->IR  = 0xff;		/* reset all interrrupts */
-  LPC_TMR32B0->MCR = 0x03;		/* stop timer on match */
-  LPC_TMR32B0->TCR = 0x01;		/* start timer */
-  NVIC_EnableIRQ(TIMER_32_0_IRQn);
-}
-//This function force a delay by input milliseconds
-void timer_delay(int msdelay){
-  LPC_TMR32B1->TCR = 0x02;		/* reset timer */
-  LPC_TMR32B1->PR  = 0x00;		/* set prescaler to zero */
-  LPC_TMR32B1->MR0 = msdelay * ((SystemCoreClock/(LPC_TMR32B0->PR+1)) / 1000);
-  LPC_TMR32B1->IR  = 0xff;		/* reset all interrrupts */
-  LPC_TMR32B1->MCR = 0x04;		/* stop timer on match */
-  LPC_TMR32B1->TCR = 0x01;		/* start timer */
-  
-    /* wait until delay time has elapsed */
-  while (LPC_TMR32B0->TCR & 0x01);
-}
-
 
 void print_string(char* str, uint32_t color, uint16_t size,uint16_t start_x, uint16_t start_y){
 	unsigned int len = strlen(str);
@@ -286,7 +273,7 @@ void print_string(char* str, uint32_t color, uint16_t size,uint16_t start_x, uin
 	for (i = 0; i < len; i++){
 		if (str[i] != ' '){
 			draw_letter(str[i],color, size, x, y);
-			x += 8*size+2;}
+			x += 8*size+1;}
 		else{
 			x += size*4;
 		}
@@ -297,43 +284,103 @@ void print_string(char* str, uint32_t color, uint16_t size,uint16_t start_x, uin
 	}
 	return;
 }
+	//Trigger interrupt every 1 seconds
+void timer_init(){	
+	LPC_TMR32B0->TCR = 0x02;		/* reset timer */
+  LPC_TMR32B0->PR  = 0x00;		/* set prescaler to zero */
+  LPC_TMR32B0->MR0 = 1000 * ((SystemCoreClock/(LPC_TMR32B0->PR+1)) / 1000);
+  LPC_TMR32B0->IR  = 0xff;		/* reset all interrrupts */
+  LPC_TMR32B0->MCR = 0x03;		/* stop timer on match */
+  LPC_TMR32B0->TCR = 0x01;		/* start timer */
+	NVIC_EnableIRQ(TIMER_32_0_IRQn);
+}
+
+void timer_delay(int msdelay){
+	LPC_TMR32B1->TCR = 0x02;		/* reset timer */
+  LPC_TMR32B1->PR  = 0x00;		/* set prescaler to zero */
+  LPC_TMR32B1->MR0 = msdelay * ((SystemCoreClock/(LPC_TMR32B0->PR+1)) / 1000);
+  LPC_TMR32B1->IR  = 0xff;		/* reset all interrrupts */
+  LPC_TMR32B1->MCR = 0x04;		/* stop timer on match */
+  LPC_TMR32B1->TCR = 0x01;		/* start timer */
+  
+    /* wait until delay time has elapsed */
+  while (LPC_TMR32B1->TCR & 0x01);
+}
+
+void read_string_from_UART(char* str2){
+	int i = 0;
+	char temp;
+	while(1){
+		temp = getkey();
+		str2[i] = temp;
+		i++;
+		if (i == sizeof(str2) || temp == '\r'){
+			i = 0;
+			break;
+		}	
+	}
+	return;
+}
+
+void TIMER32_0_IRQHandler(void){
+	sec+= 1;
+	if (sec >= 60){
+		sec = 0; min+=1;
+	}
+	if (min >= 60){
+		min = 0; hr+=1;
+	}
+	if (hr > 23)
+		hr = 0;
+	LPC_TMR32B0->IR = 1;                /* clear interrupt flag */
+}
 
 int main()
 {
-	int i;
-	int j = 8;
-	int cx = 60;
-	int cy = 240;
+	int i = 0;
+	//int j = 0;
+	//int cx = 60;
+	//int cy = 240;
+	
+	char str[20], str2[20];
 	configureGPIO();
 	SER_init();
+	
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD] = SSD1963_PIN_RD ;
 
 	SSD1963_Init();
 	//CLEAR SCREEN
 	SSD1963_FillArea(0,799,0,479,0xFFFFFF);
-	//SSD1963_FillArea(150,200,150,200,0x000000);
-	//SSD1963_FillArea(200,215,200,227,0xFF0000);
-	print_string("I have become self aware, feed me some data", 0xFF0000, 3, 10, 10);
-	//draw_letter('W', 0xFF00FF, 3, 100, 200);
-	//draw_letter('B', 0xFF00FF, 3, 104, 200);
-	/*draw_letter('b', 0xFF00FF, 2, 100, 240);
-	draw_letter('a', 0xFF00FF, 2, 100, 260);
-	
-	
-	draw_circle(30, 30, 325, 165, 0x000000,0xFFFF00);
-	draw_circle(30, 30, 475, 165, 0x000000,0xFFFF00);
-	draw_circle(50, 50, 400, 300, 0x000000,0xFFFF00);
-	*/
-	//SSD1963_WriteCommand(SSD1963_SET_DISPLAY_OFF);
-	//for (i =0; i< 0x1ffff; i++);
-	
-	//draw_circle(40, 40, 50, 240,0xFF0000,0xFFFFFF);
-			SSD1963_WriteCommand(SSD1963_NOP);
-	//	SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);
+	print_string("abcde", 0xFF0000, 3,50,50);
+	timer_init();
+	//SPECIAL NOTE!; ENTER IN PUTTY is '\r' not '\n'
 	while (1)
 	{
-		for (i =0; i< 0x3ffff; i++){
-				
-		}
+		
+		read_string_from_UART(str2);
+		
+		//sprintf(str, "%02d:%02d:%02d", hr,min,sec);
+		//j++;
+		print_string(str2,0xFF0000, 3,50,50);
+		printf("ECHO: %s\n", str2);
+		//print_string(str2, 0xFF0000, 3, 50,100);
+		//timer_delay(100);
+		
+		
+	//	printf("Testing\n");
+		
+	//	scanf("%s", str);
+	//	printf("Echo: %s\n", str);
+		/*
+		for (i =0; i< 0x3ffff; i++);
+		for (i =0; i< 0x3ffff; i++);
+		for (i =0; i< 0x3ffff; i++);
+		for (i =0; i< 0x3ffff; i++);
+		for (i =0; i< 0x3ffff; i++);
+		*/
+		//print_string(str, 0xFF0000,2, 20,20);
+		//SSD1963_WriteCommand(SSD1963_EXIT_INVERT_MODE);		
+		//SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);		
 		
 	}
 }
