@@ -4,235 +4,63 @@
 #include <rt_misc.h>
 #include <stdlib.h>     /* malloc, free, rand */
 #include <string.h>
-
-#define SSD1963_PIN_RD	(1 << 4)
-#define SSD1963_PIN_WR	(1 << 9)
-#define SSD1963_PIN_RST	(1 << 5)
-#define SSD1963_PIN_DC	(1 << 8)
+#include "font_rom.h"
 
 extern void SER_init(void);
 extern int getkey(void);
-volatile char hr = 0, min = 0,sec = 0;
-void configureGPIO()
-{
-	//Convert I2C to GPIO?
-	/*
-	LPC_SYSCON->SYSAHBCLKCTRL |= (0x1UL << 16);  // enable clock for IOCON
-	LPC_IOCON->PIO0_4 &= ~(1<<1) & ~(1<<0);   
-	LPC_IOCON->PIO0_4 |= (1<<8);
-  LPC_IOCON->PIO0_5 &= ~(1<<1) & ~(1<<0);  
-	LPC_IOCON->PIO0_5 |= (1<<8);
-	LPC_SYSCON->SYSAHBCLKCTRL &= ~(0x1UL << 16);  // disable clock for IOCON      */
-	
-	//1 to 8 as output or 0xF
+volatile char hr = 11, min = 58,sec = 0;
+volatile long int ms = 0;
+void configureGPIO(){
+	//Enable clock for timer
 	LPC_SYSCON->SYSAHBCLKCTRL |= 1 << 9 | 1 << 8;
+	//1 to 8 as output or 0xFE
 	LPC_GPIO0->DIR = 0x1FE;
 	//4 5 9 8
 	LPC_GPIO1->DIR |= SSD1963_PIN_RD | SSD1963_PIN_WR | SSD1963_PIN_RST | SSD1963_PIN_DC;
 }
 
-unsigned char SSD1963_ReadData(){
-	unsigned char result;
-	LPC_GPIO1->DATA  |= SSD1963_PIN_WR | SSD1963_PIN_DC;
-	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD] = ~SSD1963_PIN_WR;
-	result = (LPC_GPIO0->DATA >> 1) & 0xFF;
-	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD]  = SSD1963_PIN_RD;
-	return result;
-}
 
-__inline void configGPIOread(){
-	LPC_GPIO0->DIR = 0x00;
-}
-
-__inline void configGPIOwrite(){
-	LPC_GPIO0->DIR = 0x1E;
-}
-
-void SSD1963_WriteCommand(unsigned int commandToWrite){
-//	LPC_GPIO0->DATA = (commandToWrite << 1) | (LPC_GPIO0->DATA & 0x1);
-	LPC_GPIO0->MASKED_ACCESS[0x1FE] = commandToWrite<<1;
-	//LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD] = SSD1963_PIN_RD ;
-	LPC_GPIO1->DATA &= ~SSD1963_PIN_DC & ~SSD1963_PIN_WR;
-	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
-}
-
-void SSD1963_WriteData(unsigned int dataToWrite){
-	LPC_GPIO0->DATA = (dataToWrite << 1) | (LPC_GPIO0->DATA & 0x1);
-	//LPC_GPIO1->DATA  |= SSD1963_PIN_RD | SSD1963_PIN_DC;
+void fast_draw_init(int sx, int ex, int sy, int ey){
+	SSD1963_SetArea(sx,ex,sy,ey);
+	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_DC]  = SSD1963_PIN_DC;
+}
+
+void fast_draw(uint32_t color){
+	uint8_t R,G,B;
+	R = (color >> 16);
+	//LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_DC]  = SSD1963_PIN_DC;
+	LPC_GPIO0->MASKED_ACCESS[0x1FE] = R << 1;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = ~SSD1963_PIN_WR;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
+	G = ((color >> 8) & 0xFF);	
+	LPC_GPIO0->MASKED_ACCESS[0x1FE] = G << 1;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = ~SSD1963_PIN_WR;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
+	B = (color & 0xFF); 	
+	LPC_GPIO0->MASKED_ACCESS[0x1FE] = B << 1;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = ~SSD1963_PIN_WR;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
+		
 }
-
-void SSD1963_Init (void)
-{
-	
-	volatile unsigned int dly;
-	LPC_GPIO1->DATA &= ~SSD1963_PIN_RST;	
-	for(dly = 0; dly < 0x3FFFF; dly++);
-	LPC_GPIO1->DATA |= SSD1963_PIN_RST;
-	for(dly = 0; dly < 0x3FFFF; dly++);
-	SSD1963_WriteCommand(SSD1963_SOFT_RESET);
-	for(dly = 0; dly < 0x0FFFF; dly++);
-	
-	SSD1963_WriteCommand(SSD1963_SET_PLL_MN);
-	//SET DLL ; Refclock should be 10MHz Oscilator
-	/*SSD1963_WriteData(49);	// PLLclk = REFclk * 50 (500MHz)
-	SSD1963_WriteData(4);	// SYSclk = PLLclk / 5  (100MHz)
-	SSD1963_WriteData(4);  // dummy
-	*/
-	SSD1963_WriteData(0x23);
-	SSD1963_WriteData(0x2);
-	SSD1963_WriteData(0x4);
-	//LOCK PLL
-	SSD1963_WriteCommand(SSD1963_SET_PLL);
-	SSD1963_WriteData(0x01);
-	for(dly = 0; dly < 0x3FFFF; dly++);
-	SSD1963_WriteCommand(SSD1963_SET_PLL);
-	SSD1963_WriteData(0x03);
-	SSD1963_WriteCommand(SSD1963_SOFT_RESET);
-	for(dly = 0; dly < 0x0FFFF; dly++);
-	//FINISH LOCK PLL
-	
-	//set pixel clock by 30Mhz
-	// Pclock = PLL clock* value_written /2^20
-	SSD1963_WriteCommand(SSD1963_SET_LSHIFT_FREQ); 
-	/*
-	SSD1963_WriteData((LCD_FPR >> 16) & 0xFF);
-	SSD1963_WriteData((LCD_FPR >> 8) & 0xFF);
-	SSD1963_WriteData(LCD_FPR & 0xFF);
-	*/
-	SSD1963_WriteData(0x03);
-	SSD1963_WriteData(0xff);
-	SSD1963_WriteData(0xff);
-	
-	
-	//SET LCD MODE
-	SSD1963_WriteCommand(SSD1963_SET_LCD_MODE); 
-	//vert+horiz sync active low
-	//data latch in rising edge + enable TFT FRC disable TFT dithering
-	SSD1963_WriteData(0x0C);			
-	//TFT mode in bit 5+6
-	SSD1963_WriteData(0x00);			
-	//SET dimensions 800 * 480
-	SSD1963_WriteData(mHIGH((TFT_WIDTH-1)));
-	SSD1963_WriteData(mLOW((TFT_WIDTH-1)));
-	SSD1963_WriteData(mHIGH((TFT_HEIGHT-1)));
-	SSD1963_WriteData(mLOW((TFT_HEIGHT-1)));
-	//Send in sequence RGB
-	SSD1963_WriteData(0x00);
-	
-	//set pixel data by 8 bit * 3 times
-	SSD1963_WriteCommand(SSD1963_SET_PIXEL_DATA_INTERFACE);
-	SSD1963_WriteData(SSD1963_PDI_8BIT);
-
-	SSD1963_WriteCommand(SSD1963_SET_HORI_PERIOD);
-	SSD1963_WriteData(((928>>8) &0x0FF));
-	SSD1963_WriteData(((928) &0x0FF));
-	SSD1963_WriteData(((46>>8) &0x0FF));
-	SSD1963_WriteData(((46) &0x0FF));
-	SSD1963_WriteData(((48) &0x0FF));
-	SSD1963_WriteData(((15>>8) &0x0FF));
-	SSD1963_WriteData(((15) &0x0FF));
-	SSD1963_WriteData(0x00);			
-	
-	SSD1963_WriteCommand(SSD1963_SET_VERT_PERIOD);
-	SSD1963_WriteData(((525>>8) &0x0FF));
-	SSD1963_WriteData(((525) &0x0FF));
-	SSD1963_WriteData(((16>>8) &0x0FF));
-	SSD1963_WriteData(((16) &0x0FF));
-	SSD1963_WriteData(((16) &0x0FF));
-	SSD1963_WriteData(((8>>8) &0x0FF));
-	SSD1963_WriteData(((8) &0x0FF));
-	//SSD1963_WriteData(0x00);			
-	
-	
-	/*
-	//Total period
-	SSD1963_WriteData(mHIGH(TFT_HSYNC_PERIOD));
-	SSD1963_WriteData(mLOW(TFT_HSYNC_PERIOD));
-	//non display period
-	SSD1963_WriteData(mHIGH((TFT_HSYNC_PULSE + TFT_HSYNC_BACK_PORCH)));
-	SSD1963_WriteData(mLOW((TFT_HSYNC_PULSE + TFT_HSYNC_BACK_PORCH)));
-	//horiz pulse width
-	SSD1963_WriteData(TFT_HSYNC_PULSE);
-	//start location in pix clock
-	SSD1963_WriteData(0x00);			
-	
-	
-	SSD1963_WriteCommand(SSD1963_SET_VERT_PERIOD); 		
-	SSD1963_WriteData(mHIGH(TFT_VSYNC_PERIOD));
-	SSD1963_WriteData(mLOW(TFT_VSYNC_PERIOD));
-	SSD1963_WriteData(mHIGH((TFT_VSYNC_PULSE + TFT_VSYNC_BACK_PORCH)));
-	SSD1963_WriteData(mLOW((TFT_VSYNC_PULSE + TFT_VSYNC_BACK_PORCH)));
-	SSD1963_WriteData(TFT_VSYNC_PULSE);
-	SSD1963_WriteData(0x00);			
-	SSD1963_WriteData(0x00);
-	*/
-	SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);		//SET display on
-}
-
-void SSD1963_SetArea(unsigned int sx, unsigned int ex, unsigned int sy, unsigned int ey)
-{
-	SSD1963_WriteCommand(SSD1963_SET_COLUMN_ADDRESS);	
-	SSD1963_WriteData((sx >> 8) & 0xFF);
-	SSD1963_WriteData((sx >> 0) & 0xFF);
-	SSD1963_WriteData((ex >> 8) & 0xFF);
-	SSD1963_WriteData((ex >> 0) & 0xFF);
-
-	SSD1963_WriteCommand(SSD1963_SET_PAGE_ADDRESS);	
-	SSD1963_WriteData((sy >> 8) & 0xFF);
-	SSD1963_WriteData((sy >> 0) & 0xFF);
-	SSD1963_WriteData((ey >> 8) & 0xFF);
-	SSD1963_WriteData((ey >> 0) & 0xFF);
-}
-
-void SSD1963_FillArea(unsigned int sx, unsigned int ex, unsigned int sy, unsigned int ey, int color)
-{
-int i;
-SSD1963_SetArea(sx, ex, sy, ey);
-SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
-for(i = 0; i < ((ex-sx+1)*(ey-sy+1)); i++)
-	{
-		SSD1963_WriteData(color >> 16);
-		SSD1963_WriteData((color >> 8)&0xFF);
-		SSD1963_WriteData(color & 0xFF);
-	}
-}
-void GLCD_SetPixel(int x, int y, int color)
-{
-	SSD1963_FillArea(x, x, y, y,color);
-/*	SSD1963_WriteCommand(0x2c);
-	SSD1963_WriteData(color >> 16);
-	SSD1963_WriteData((color >> 8)&0xFF);
-	SSD1963_WriteData(color & 0xFF);SSD1963_WriteCommand(0x0);*/
-}
-volatile uint32_t color = 0x0FFF0F;
 
 void draw_circle(uint8_t rad, uint8_t border, uint16_t center_x, uint16_t center_y, uint32_t color, uint32_t bgcolor){
 	int i,j;
 	int bound = rad*rad;
 	int bound2 = (rad-border)*(rad-border);
 	//char flag = 0;
-	SSD1963_SetArea(center_x-rad, center_x+rad-1, center_y-rad, center_y+rad-1);
-	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
+	//SSD1963_SetArea(center_x-rad, center_x+rad-1, center_y-rad, center_y+rad-1);
+	//SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
+	fast_draw_init(center_x-rad, center_x+rad-1, center_y-rad, center_y+rad-1);
 	for (i = 0; i < rad*2; i++){
 		for (j = 0; j < rad*2; j++){
 			int distance = abs(i-rad)*abs(i-rad) + abs(j-rad)*abs(j-rad);
 			if (distance <= bound && distance >= bound2){
-				SSD1963_WriteData(color >> 16);
-				SSD1963_WriteData((color >> 8)&0xFF);
-				SSD1963_WriteData(color & 0xFF);
+				fast_draw(color);
 			}
 			else{
-				//if (flag == 0)
-				//	flag = 1;
-				
-				SSD1963_WriteData(bgcolor >> 16);
-				SSD1963_WriteData((bgcolor >> 8)&0xFF);
-				SSD1963_WriteData(bgcolor & 0xFF);
-			}
-			
+				fast_draw(bgcolor);
+			}		
 		}
 	}
 }
@@ -242,28 +70,57 @@ void draw_letter(unsigned char c, uint32_t color, uint16_t size, uint16_t start_
 	int offset = (c - ' ')*16;
 	if (c < ' ')
 		return;
-	if (start_x + size*8 > 799 || start_y + size*8 > 479)
+	if (start_x + size*8 > 799 || start_y + size*16 > 479)
 		return;
-	SSD1963_SetArea(start_x, start_x+8*size-1, start_y, start_y+16*size -1);
-	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
+	fast_draw_init(start_x, start_x+8*size-1, start_y, start_y+16*size -1);
+
 	for (j = 0; j < 16*size; j++){
 		for (i = 8*size-1 ; i >= 0; i--){
 			if (((font_rom[j/size+offset]>>i/size) & 0x1) == 1){
-				SSD1963_WriteData(color >> 16);
-				SSD1963_WriteData((color >> 8)&0xFF);
-				SSD1963_WriteData(color & 0xFF);
-				//SSD1963_FillArea(start_y+(7-i)*size,start_y+(8-i)*size,start_x+(j-1)*size,start_x+j*size, color);
+				fast_draw(color);
 			}
 			else{
-				SSD1963_WriteData(0xFF);
-				SSD1963_WriteData(0xFF);
-				SSD1963_WriteData(0xFF);
-				//SSD1963_FillArea(start_y+(7-i)*size,start_y+(8-i)*size,start_x+(j-1)*size,start_x+j*size, 0xFFFFFF);
+				fast_draw(0xFFFFFF);
 			}
 		}
 	}
 }	
 	
+void draw_letter_90(unsigned char c, uint32_t color, uint8_t size, uint8_t div_size,uint16_t start_x, uint16_t start_y){
+	int i, j;
+	int offset = (c - ' ')*16;
+	int ratio = 8*size/div_size;
+	if (c < ' ')
+		return;
+	if (start_x + size*16/div_size > 799 || start_y + size*8/div_size > 479)
+		return;
+	fast_draw_init(start_x, start_x+2*ratio-1, start_y, start_y+ ratio -1);
+	for (i = 0 ; i < ratio; i++){
+		for (j = 0; j < 2*ratio; j++){
+			if ((font_rom[j*div_size/size+offset]>>i*div_size/size & 0x1) == 1)
+				fast_draw(color);
+			else
+				fast_draw(0x000000);
+		}
+	}
+}
+
+void temp(unsigned char c, uint32_t color, float size,uint16_t start_x, uint16_t start_y){
+	int i,j;
+	int offset = (c - ' ')*16;
+	int lim = (int)(8*size);
+	if ((c < ' ') || (start_x + lim*2 > 799 || start_y + lim > 479))
+		return;
+	fast_draw_init(start_x, start_x+2*lim-(int)(size)-1, start_y, start_y+ lim-1);
+	for (i = 0 ; i < lim; i++){
+		for (j = 0; j < 2*lim-(int)(size); j++){
+			if ((font_rom[j*8/lim+offset]>> i*8/lim & 0x1) == 1)
+				fast_draw(color);
+			else
+				fast_draw(0x000000);
+		}
+	}
+}
 
 void print_string(char* str, uint32_t color, uint16_t size,uint16_t start_x, uint16_t start_y){
 	unsigned int len = strlen(str);
@@ -273,10 +130,10 @@ void print_string(char* str, uint32_t color, uint16_t size,uint16_t start_x, uin
 	for (i = 0; i < len; i++){
 		if (str[i] != ' '){
 			draw_letter(str[i],color, size, x, y);
-			x += 8*size+1;}
-		else{
-			x += size*4;
+			x += 8*size+1;
 		}
+		else
+			x += size*4;
 		if (x >= 780){
 			x = 0;
 			y+= 16*size;
@@ -284,11 +141,46 @@ void print_string(char* str, uint32_t color, uint16_t size,uint16_t start_x, uin
 	}
 	return;
 }
-	//Trigger interrupt every 1 seconds
+
+void print_string_90(const char* str, uint32_t color, float size, uint16_t start_x, uint16_t start_y, uint8_t format){
+	unsigned int len = strlen(str);
+	int i,x,y,r;
+	r = (int)(8*size);
+	x = start_x;
+	y = start_y;
+	for (i = len-1; i >= 0; i--){
+		if (str[i] != ' '){
+			temp(str[i],color, size, x, y);		// ~ 1% more efficient
+			//draw_letter_90(str[i],color, size, div_size, x, y);
+			y += r;
+		}
+		else
+			y += r >> 1;
+		if (y +r >= 479){
+			y = start_y;
+			x+= r << 1;
+		}		
+	}
+	//UNDERLINE
+	
+	if ((format & 0x1) == 1){
+		SSD1963_SetArea(start_x+r-3, start_x+16*size-1, start_y, start_y+y);
+		SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
+		for (i = 0; i < len*24*size;i++){
+				SSD1963_WriteData(color >> 16);
+				SSD1963_WriteData((color >> 8)&0xFF);	
+				SSD1963_WriteData(color & 0xFF);
+		}
+	}
+	
+	return;
+}
+
+//Trigger interrupt every 1 milliseconds
 void timer_init(){	
 	LPC_TMR32B0->TCR = 0x02;		/* reset timer */
   LPC_TMR32B0->PR  = 0x00;		/* set prescaler to zero */
-  LPC_TMR32B0->MR0 = 1000 * ((SystemCoreClock/(LPC_TMR32B0->PR+1)) / 1000);
+  LPC_TMR32B0->MR0 = 1 * ((SystemCoreClock/(LPC_TMR32B0->PR+1)) / 1000);
   LPC_TMR32B0->IR  = 0xff;		/* reset all interrrupts */
   LPC_TMR32B0->MCR = 0x03;		/* stop timer on match */
   LPC_TMR32B0->TCR = 0x01;		/* start timer */
@@ -301,20 +193,19 @@ void timer_delay(int msdelay){
   LPC_TMR32B1->MR0 = msdelay * ((SystemCoreClock/(LPC_TMR32B0->PR+1)) / 1000);
   LPC_TMR32B1->IR  = 0xff;		/* reset all interrrupts */
   LPC_TMR32B1->MCR = 0x04;		/* stop timer on match */
-  LPC_TMR32B1->TCR = 0x01;		/* start timer */
-  
-    /* wait until delay time has elapsed */
+  LPC_TMR32B1->TCR = 0x01;		/* start timer */  
+   /* wait until delay time has elapsed */
   while (LPC_TMR32B1->TCR & 0x01);
 }
 
-void read_string_from_UART(char* str2){
+void read_string_from_UART(char* str2, int size){
 	int i = 0;
 	char temp;
 	while(1){
 		temp = getkey();
 		str2[i] = temp;
 		i++;
-		if (i == sizeof(str2) || temp == '\r'){
+		if (i == size || temp == '\r'){
 			i = 0;
 			break;
 		}	
@@ -323,7 +214,9 @@ void read_string_from_UART(char* str2){
 }
 
 void TIMER32_0_IRQHandler(void){
-	sec+= 1;
+	//sec+= 1;
+	ms+=1;
+	/*
 	if (sec >= 60){
 		sec = 0; min+=1;
 	}
@@ -332,57 +225,177 @@ void TIMER32_0_IRQHandler(void){
 	}
 	if (hr > 23)
 		hr = 0;
+	*/
 	LPC_TMR32B0->IR = 1;                /* clear interrupt flag */
 }
 
+void recv_img_24bmp(){
+	uint8_t data1, data2, data3;
+	uint32_t col;
+	int width, height;
+	int count = 0;
+	data1 = getkey();
+	data2 = getkey();
+	data3 = getkey();
+	width = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	data1 = getkey();
+	data2 = getkey();
+	data3 = getkey();
+	height = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	fast_draw_init(0,width -1, 0, height-1);
+	//SSD1963_SetArea(470,width+469,0,height-1);
+	//SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
+	//timer_init();
+	while (count < width * height)
+	{
+		data1 = getkey();
+		data2 = getkey();
+		data3 = getkey();
+		count++;
+		col = (data1 << 16) | (data2 << 8) | (data3);
+		//if (data1 == 'e' && data2 == 'n' && data3 == 'd'){
+		//	
+		//}
+		fast_draw(col);
+		
+	}
+}
+
+void recv_bitmap(){
+	uint8_t data1, data2, data3;
+	int width, height;
+	data1 = getkey();
+	data2 = getkey();
+	data3 = getkey();
+	width = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	data1 = getkey();
+	data2 = getkey();
+	data3 = getkey();
+	height = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	SSD1963_SetArea(0,width,0,height-1);
+	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
+	while(1){
+		data1 = getkey();
+		if (data1 == 'e')
+			break;
+		if (data1 == 0){
+			SSD1963_WriteData(0xFF);
+			SSD1963_WriteData(0xFF);
+			SSD1963_WriteData(0xFF);
+		}
+		else{
+			SSD1963_WriteData(0x00);
+			SSD1963_WriteData(0x00);
+			SSD1963_WriteData(0xFF);
+		}
+	}
+}
+
+
 int main()
 {
-	int i = 0;
-	//int j = 0;
-	//int cx = 60;
-	//int cy = 240;
+	int i,j,k,l;
+	char temperature = 52;
+	char humidity = 70;
+	char str2[100];
 	
-	char str[20], str2[20];
+	char date[25];
+	char time[25];
+	char weather[25];
+	//char temp[25];
+	char news1[25];
+	char news2[25];
+	char news3[25];
+
 	configureGPIO();
 	SER_init();
 	
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_RD] = SSD1963_PIN_RD ;
 
+
 	SSD1963_Init();
+	
 	//CLEAR SCREEN
-	SSD1963_FillArea(0,799,0,479,0xFFFFFF);
-	print_string("abcde", 0xFF0000, 3,50,50);
-	timer_init();
+	//SSD1963_FillArea(0,799,0,479,0xFF00FF);
+	//timer_delay(100);
+	SSD1963_FillArea(1,799,0,479,0x000000);
+	//print_string_90("THIS IS A VERY LONG LINE OF TEXT", 0xFFFFFF,9,2,100,20,0x0);
+	//EXECUTION DOWN HERE
 	//SPECIAL NOTE!; ENTER IN PUTTY is '\r' not '\n'
-	while (1)
-	{
+	/recv_bitmap();
+	//sprintf(str2,"Ms:%ld", ms);
+	
+	
+	while(1){
+		read_string_from_UART(date, 100); 
+		read_string_from_UART(time, 100); 
+		read_string_from_UART(weather, 100);
+		read_string_from_UART(temp, 100);		
+		read_string_from_UART(news1, 100);
+		read_string_from_UART(news2, 100);
+		read_string_from_UART(news3, 100);		
 		
-		read_string_from_UART(str2);
+
+		print_string_90(date, 0xFFFFFF,2,1,20,20,0x0);
+		print_string_90(time,0xFFFFFF, 6,1, 52,20,0x0);
+		print_string_90(weather,0xFFFFFF, 2,1, 227,67,0x0);
+		print_string_90(temp,0xFFFFFF, 3,2, 267,20,0x0);
+		print_string_90(news1,0xFFFFFF,3,2, 362,20,0x0);
+		print_string_90(news2,0xFFFFFF, 3,2, 394,20,0x0);
+		print_string_90(news3,0xFFFFFF, 3,2, 426,20,0x0);
 		
-		//sprintf(str, "%02d:%02d:%02d", hr,min,sec);
-		//j++;
-		print_string(str2,0xFF0000, 3,50,50);
-		printf("ECHO: %s\n", str2);
-		//print_string(str2, 0xFF0000, 3, 50,100);
-		//timer_delay(100);
-		
-		
-	//	printf("Testing\n");
-		
-	//	scanf("%s", str);
-	//	printf("Echo: %s\n", str);
-		/*
-		for (i =0; i< 0x3ffff; i++);
-		for (i =0; i< 0x3ffff; i++);
-		for (i =0; i< 0x3ffff; i++);
-		for (i =0; i< 0x3ffff; i++);
-		for (i =0; i< 0x3ffff; i++);
-		*/
-		//print_string(str, 0xFF0000,2, 20,20);
-		//SSD1963_WriteCommand(SSD1963_EXIT_INVERT_MODE);		
-		//SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);		
-		
+	
+	//print_string_90("Wednesday, Oct 26", 0xFFFFFF,2,1,20,20,0x0);
+	
+	//print_string_90("Good afternoon, Neo", 0xFFFFFF,2,1,120,180,0x0);
+	
+	print_string_90("Weather today",0xFFFFFF,2,1,185,20,0x1);
+	//draw icon
+	
+	SSD1963_SetArea(220, 267, 20, 67);
+	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
+	for (j = 0; j < 288; j++){
+		for (i = 7 ; i >= 0; i--){
+			if (((sun[j]>>i) & 0x1) == 1){
+				SSD1963_WriteData(0x00);	
+				SSD1963_WriteData(0x00);	
+				SSD1963_WriteData(0x00);
+			}
+			else{
+				SSD1963_WriteData(0xFF);SSD1963_WriteData(0xFF);SSD1963_WriteData(0xFF);
+			}
+		}
 	}
+	
+	//print_string_90("Stormy ",0xFFFFFF, 2,1, 227,67,0x0);
+	
+	//sprintf(str2,"Temp: %d*F  Humidity: %d%%",temperature,humidity);
+	//print_string_90(str2,0xFFFFFF, 3,2, 267,20,0x0);
+	
+	
+	print_string_90("Notifications:",0xFFFFFF, 2,1, 330,20,0x1);
+	//print_string_90("Feed the dogs",0xFFFFFF, 3,2, 362,20,0x0);
+	//print_string_90("Run away from responsibilites",0xFFFFFF, 3,2, 394,20,0x0);
+	//print_string_90("Avoid existential crisis",0xFFFFFF, 3,2, 426,20,0x0);
+
+	}
+	
+	/*
+	timer_init();
+	while(1){
+		if (hr < 12)
+			sprintf(str2,"%02d:%02d am",hr,min);
+		else{
+			if (hr == 12)
+				sprintf(str2,"%02d:%02d pm",hr,min);
+			else
+				sprintf(str2,"%02d:%02d pm",hr-12,min);
+		}
+		print_string_90(str2,0xFFFFFF, 6,1, 52,20,0x0);
+	}
+	*/
 }
+
+
 
 
