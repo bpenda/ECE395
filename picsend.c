@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <windows.h>
 
+//This function create a pallete for the 256 color BMP from filename 
+//and return pointer to 756 bytes of memory
 
 unsigned char* read256BMPpallet(char* filename){
 	FILE* f = fopen(filename, "rb");
@@ -24,14 +26,13 @@ unsigned char* read256BMPpallet(char* filename){
 	}
 	//unsigned char *data = malloc(sizeof(unsigned char)*size); // allocate 3 bytes per pixel
 	
-	return cpallet;
-	
+	return cpallet;	
 	return NULL;
 }
 
 
 
-
+//The pixel data in forms of index to the pallete of 256 color BMP
 unsigned char* read256BMPdata(char* filename){
 	FILE* f = fopen(filename, "rb");
     unsigned char info[1078];
@@ -49,7 +50,7 @@ unsigned char* read256BMPdata(char* filename){
 }	
 
 
-
+//This read 24bit BMP for max resolution, but slow
 unsigned char* readBMP(char* filename)
 {
     int i;
@@ -94,7 +95,7 @@ unsigned char* readBMP(char* filename)
 	*/
     return data;
 }
-
+//return width of image
 int filewidth(char* filename){
     FILE* f = fopen(filename, "rb");
     unsigned char info[54];
@@ -104,7 +105,7 @@ int filewidth(char* filename){
 	fclose(f);
 	return width;
 }
-
+//return height of image
 int fileheight(char*filename){
 	FILE* f = fopen(filename, "rb");
     unsigned char info[54];
@@ -114,7 +115,7 @@ int fileheight(char*filename){
 	return height;
 }
 
- 
+//run length encoding to shorten data sent 
 int encode(const unsigned char* data, int len, unsigned char * res) {
 	/*unsigned char * */
 	int i,j = 0;
@@ -123,6 +124,8 @@ int encode(const unsigned char* data, int len, unsigned char * res) {
 		j++;
 		res[j]++;
 		while(i+1< len && data[i] == data[i+1] && res[j] < 0xCF){
+			//Note: 0xCF is set to the max repeat index since only 8 bits + write pixel takes time,
+			// so any faster may cause UART reading errors
 		  res[j]++;
 		  i++;
 		}
@@ -142,6 +145,8 @@ int encode(const unsigned char* data, int len, unsigned char * res) {
 	return j;
 }
  
+
+//Below is USB send code for Windows, not LINUX
 int main()
 {
     // Define the five bytes to send ("hello")
