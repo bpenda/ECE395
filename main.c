@@ -41,8 +41,21 @@ void fast_draw(uint32_t color){
 	LPC_GPIO0->MASKED_ACCESS[0x1FE] = B << 1;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = ~SSD1963_PIN_WR;
 	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
-		
 }
+
+
+void fast_draw2(uint8_t R, uint8_t G, uint8_t B){
+	LPC_GPIO0->MASKED_ACCESS[0x1FE] = R << 1;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = ~SSD1963_PIN_WR;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
+	LPC_GPIO0->MASKED_ACCESS[0x1FE] = G << 1;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = ~SSD1963_PIN_WR;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
+	LPC_GPIO0->MASKED_ACCESS[0x1FE] = B << 1;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = ~SSD1963_PIN_WR;
+	LPC_GPIO1->MASKED_ACCESS[SSD1963_PIN_WR]  = SSD1963_PIN_WR;
+}
+
 
 void draw_circle(uint8_t rad, uint8_t border, uint16_t center_x, uint16_t center_y, uint32_t color, uint32_t bgcolor){
 	int i,j;
@@ -228,10 +241,51 @@ void TIMER32_0_IRQHandler(void){
 	*/
 	LPC_TMR32B0->IR = 1;                /* clear interrupt flag */
 }
+void recv_img_256bmg(){
+	uint8_t data1, data2, data3;
+	int width, height;
+	int idx = 0,k;
+	unsigned char palletr[256];
+	unsigned char palletg[256];
+	unsigned char palletb[256];
+	
+	int count = 0;
+	data1 = getkey();
+	data2 = getkey();
+	data3 = getkey();
+	width = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	data1 = getkey();
+	data2 = getkey();
+	data3 = getkey();
+	height = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	fast_draw_init(0,width-1, 0, height-1);
+	
+	while (count < 256){
+		data1 = getkey();
+		palletr[count] = data1;
+		data1 = getkey();
+		palletg[count] = data1;
+		data1 = getkey();
+		palletb[count] = data1;
+		count++;
+	}
+	idx = width*height;
+	count = 0;	
+	while (count < idx){
+		data1 = getkey();
+		data2 = getkey();
+		
+		for (k = 0; k < data2; k++){
+			fast_draw2(palletr[data1], palletg[data1], palletb[data1]);
+			count++;
+		}
+	}
+}
+
 
 void recv_img_24bmp(){
 	uint8_t data1, data2, data3;
-	uint32_t col;
+	//uint32_t col;
 	int width, height;
 	int count = 0;
 	data1 = getkey();
@@ -252,60 +306,18 @@ void recv_img_24bmp(){
 		data2 = getkey();
 		data3 = getkey();
 		count++;
-		col = (data1 << 16) | (data2 << 8) | (data3);
+		//col = (data1 << 16) | (data2 << 8) | (data3);
 		//if (data1 == 'e' && data2 == 'n' && data3 == 'd'){
 		//	
 		//}
-		fast_draw(col);
+		fast_draw2(data1,data2,data3);
 		
 	}
 }
 
-void recv_bitmap(){
-	uint8_t data1, data2, data3;
-	int width, height;
-	data1 = getkey();
-	data2 = getkey();
-	data3 = getkey();
-	width = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
-	data1 = getkey();
-	data2 = getkey();
-	data3 = getkey();
-	height = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
-	SSD1963_SetArea(0,width,0,height-1);
-	SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
-	while(1){
-		data1 = getkey();
-		if (data1 == 'e')
-			break;
-		if (data1 == 0){
-			SSD1963_WriteData(0xFF);
-			SSD1963_WriteData(0xFF);
-			SSD1963_WriteData(0xFF);
-		}
-		else{
-			SSD1963_WriteData(0x00);
-			SSD1963_WriteData(0x00);
-			SSD1963_WriteData(0xFF);
-		}
-	}
-}
-
-
 int main()
 {
-	int i,j,k,l;
-	char temperature = 52;
-	char humidity = 70;
-	char str2[100];
 	
-	char date[25];
-	char time[25];
-	char weather[25];
-	//char temp[25];
-	char news1[25];
-	char news2[25];
-	char news3[25];
 
 	configureGPIO();
 	SER_init();
@@ -319,13 +331,28 @@ int main()
 	//SSD1963_FillArea(0,799,0,479,0xFF00FF);
 	//timer_delay(100);
 	SSD1963_FillArea(1,799,0,479,0x000000);
-	//print_string_90("THIS IS A VERY LONG LINE OF TEXT", 0xFFFFFF,9,2,100,20,0x0);
+	//print_string_90("Supercalafajalistickespeealadojus", 0xFFFFFF,1.5,100,20,0x0);
 	//EXECUTION DOWN HERE
 	//SPECIAL NOTE!; ENTER IN PUTTY is '\r' not '\n'
-	/recv_bitmap();
+	recv_img_256bmg();
+	
+	while(1);
+	//recv_bitmap();
 	//sprintf(str2,"Ms:%ld", ms);
 	
+	/*
+	int i,j,k,l;
+	char temperature = 52;
+	char humidity = 70;
+	char str2[100];
 	
+	char date[25];
+	char time[25];
+	char weather[25];
+	//char temp[25];
+	char news1[25];
+	char news2[25];
+	char news3[25];
 	while(1){
 		read_string_from_UART(date, 100); 
 		read_string_from_UART(time, 100); 
@@ -379,7 +406,7 @@ int main()
 	//print_string_90("Avoid existential crisis",0xFFFFFF, 3,2, 426,20,0x0);
 
 	}
-	
+	*/
 	/*
 	timer_init();
 	while(1){
