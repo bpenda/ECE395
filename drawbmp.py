@@ -15,44 +15,52 @@ SECONDARY_TEXT      = (0,0,0)
 TERTIARY_TEXT       = (0,0,0)  
 
 #Fonts
-font1 = ImageFont.truetype("fonts/1.ttf",80)
-font2 = ImageFont.truetype("fonts/1.ttf",30)
-font3 = ImageFont.truetype("fonts/1.ttf",15)
+CLOCK_FONT_PATH = "fonts/1.otf"
+FONT_PATH = "fonts/1.ttf"
+font1 = ImageFont.truetype(CLOCK_FONT_PATH,120)
+font2 = ImageFont.truetype(FONT_PATH,40)
+font3 = ImageFont.truetype("fonts/2.otf",22)
+font4 = ImageFont.truetype(CLOCK_FONT_PATH,80)
 
 #DATA
 data = serv.getInfo()
 TIME = data["DateTime"].split()[1]
 DATE = data["DateTime"].split()[0]
-TEMP = str(data["Weather"][1]['temp'])
+TEMP = str(data["Weather"][1]['temp'])[:2] + " F"
 WEAT = str(data["Weather"][0])
-NEWS = "Headlines"
-NEWS0 = "-- " + str(data["Headlines"][0])
-NEWS1 = "-- " + str(data["Headlines"][1])
-NEWS2 = "-- " + str(data["Headlines"][2])
-NEWS3 = "-- " + str(data["Headlines"][3])
+print WEAT
+NEWS = "Today's Headlines:"
+#FUNCTION TO FORMAT HEADLINES. (Text goes off the screen, multiple lines, etc.)
+def formatNews(news):
+    LINE_NUM = 34 
+    para = [] 
+    for head in news:
+        t = ""
+        if len(head) > LINE_NUM: 
+            t = head[:LINE_NUM] + "\n   " + head[LINE_NUM:]
+        if len(head) > LINE_NUM*2: 
+            t = t[:LINE_NUM*2] + "\n   " + t[LINE_NUM*2:]
+        if len(t) > 0: 
+            para.append(t)
+        else:
+            para.append(head)
+    return "-- " + "\n\n-- ".join(para)
 
-#TEMP Fix for double line news stories
-if len(NEWS0) > 50:
-    NEWS0 = NEWS0[:50] + "\n   " + NEWS0[50:]
-if len(NEWS1) > 50:
-    NEWS1 = NEWS1[:50] + "\n   " + NEWS1[50:]
-if len(NEWS2) > 50:
-    NEWS2 = NEWS2[:50] + "\n   " + NEWS2[50:]
+ALL_NEWS = formatNews(data["Headlines"][:3])
 
 def drawScreen():
     img = Image.new("RGBA", SCREEN, BACKGROUND_COLOR)
     draw = ImageDraw.Draw(img)
     im = Image.open("weather/" + WEAT + ".png").convert('RGBA')
 
-    #DRAWING
-    draw.text((20, 20),     TIME,   PRIMARY_TEXT,   font=font1)
-    draw.text((20, 120),    DATE,   PRIMARY_TEXT,   font=font2)
-    img.paste(im, (20,200), im)
-    draw.text((30, 350),    TEMP,   PRIMARY_TEXT,   font=font2)
-    draw.text((20, 420),    NEWS,   PRIMARY_TEXT,   font=font2)
-    draw.text((20, 460),    NEWS0,   PRIMARY_TEXT,   font=font3)
-    draw.text((20, 500),    NEWS1,   PRIMARY_TEXT,   font=font3)
-    draw.text((20, 540),    NEWS2,   PRIMARY_TEXT,   font=font3)
+    #DRAWING START
+    draw.text((20, 30),     TIME,   PRIMARY_TEXT,   font=font1)
+    draw.text((65, 170),    DATE,   PRIMARY_TEXT,   font=font2)
+    img.paste(im, (40,300), im)
+    draw.text((200, 300),    TEMP,   PRIMARY_TEXT,   font=font4)
+    draw.text((20, 500),    NEWS,   PRIMARY_TEXT,   font=font2)
+    draw.text((20, 550),    ALL_NEWS,   PRIMARY_TEXT,   font=font3)
+    #DRAWING END
 
     draw = ImageDraw.Draw(img)
     img = img.convert(mode="P", colors=255)

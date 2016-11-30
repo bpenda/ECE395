@@ -2,7 +2,7 @@
 #pip import praw
 
 # -*- coding: utf-8 -*-
-from time import gmtime, strftime, sleep
+from time import gmtime, strftime, sleep, localtime
 from subprocess import call
 import os.path
 import pyowm
@@ -32,7 +32,7 @@ def disconnectUART():
     call("screen -S " + SCREEN_SESSION + " -X quit", shell=True)
 
 def getDateTime():
-    return strftime("%Y-%m-%d %H:%M", gmtime()) 
+    return strftime("%Y-%m-%d %H:%M", localtime()) 
 
 def getWeather():
     owm = pyowm.OWM(WEATHER_API_KEY)
