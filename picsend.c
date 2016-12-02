@@ -1,7 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <windows.h>
-
+//#include <windows.h>
+#include <errno.h>
+#include <fcntl.h> 
+#include <string.h>
+#include <termios.h>
+#include <unistd.h>
 //This function create a pallete for the 256 color BMP from filename 
 //and return pointer to 756 bytes of memory
 
@@ -146,103 +150,86 @@ int encode(const unsigned char* data, int len, unsigned char * res) {
 }
  
 
+int
+set_interface_attribs (int fd, int speed, int parity)
+{
+        struct termios tty;
+        memset (&tty, 0, sizeof tty);
+        if (tcgetattr (fd, &tty) != 0)
+        {
+                perror("error from tcgetattr");
+                return -1;
+        }
+
+        cfsetospeed (&tty, speed);
+        cfsetispeed (&tty, speed);
+
+        tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;     // 8-bit chars
+        // disable IGNBRK for mismatched speed tests; otherwise receive break
+        // as \000 chars
+        tty.c_iflag &= ~IGNBRK;         // disable break processing
+        tty.c_lflag = 0;                // no signaling chars, no echo,
+                                        // no canonical processing
+        tty.c_oflag = 0;                // no remapping, no delays
+        tty.c_cc[VMIN]  = 0;            // read doesn't block
+        tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+
+        tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
+
+        tty.c_cflag |= (CLOCAL | CREAD);// ignore modem controls,
+                                        // enable reading
+        tty.c_cflag &= ~(PARENB | PARODD);      // shut off parity
+        tty.c_cflag |= parity;
+        tty.c_cflag &= ~CSTOPB;
+        tty.c_cflag &= ~CRTSCTS;
+
+        if (tcsetattr (fd, TCSANOW, &tty) != 0)
+        {
+                perror("error from tcsetattr");
+                return -1;
+        }
+        return 0;
+}
+
+
 //Below is USB send code for Windows, not LINUX
 int main()
 {
-    // Define the five bytes to send ("hello")
- 
-    // Declare variables and structures
-    HANDLE hSerial;
-    DCB dcbSerialParams = {0};
-    COMMTIMEOUTS timeouts = {0};
-         
-    // Open the highest available serial port number
-    fprintf(stderr, "Opening serial port...");
-    hSerial = CreateFile(
-                "\\\\.\\COM4", GENERIC_READ|GENERIC_WRITE, 0, NULL,
-                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL );
-    if (hSerial == INVALID_HANDLE_VALUE)
-    {
-            fprintf(stderr, "Error\n");
-            return 1;
-    }
-    else fprintf(stderr, "OK\n");
-     
-    // Set device parameters (38400 baud, 1 start bit,
-    // 1 stop bit, no parity)
-    dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
-    if (GetCommState(hSerial, &dcbSerialParams) == 0)
-    {
-        fprintf(stderr, "Error getting device state\n");
-        CloseHandle(hSerial);
-        return 1;
-    }
-     
-    dcbSerialParams.BaudRate = CBR_115200;
-    dcbSerialParams.ByteSize = 8;
-    dcbSerialParams.StopBits = ONESTOPBIT;
-    dcbSerialParams.Parity = NOPARITY;
-    if(SetCommState(hSerial, &dcbSerialParams) == 0)
-    {
-        fprintf(stderr, "Error setting device parameters\n");
-        CloseHandle(hSerial);
-        return 1;
-    }
- 
-    // Set COM port timeout settings
-    timeouts.ReadIntervalTimeout = 50;
-    timeouts.ReadTotalTimeoutConstant = 50;
-    timeouts.ReadTotalTimeoutMultiplier = 10;
-    timeouts.WriteTotalTimeoutConstant = 50;
-    timeouts.WriteTotalTimeoutMultiplier = 10;
-    if(SetCommTimeouts(hSerial, &timeouts) == 0)
-    {
-        fprintf(stderr, "Error setting timeouts\n");
-        CloseHandle(hSerial);
-        return 1;
-    }
- 
-    // Send specified text (remaining command line arguments)
-    DWORD bytes_written, total_bytes_written = 0;
-    fprintf(stderr, "Sending bytes...");
-    
+	char *portname = "/dev/ttyUSB1";
+	int fd = open (portname, O_RDWR | O_NOCTTY | O_SYNC);
+	if (fd < 0){
+		perror("Error open USB port");
+		exit(1);
+	}
+	set_interface_attribs (fd, B115200, 0);  // set speed to 115,200 bps, 8n1 (no parity)
 	char buffer[50] = "./sampui.bmp";
-	DWORD bytes_to_read = 50;
+	//DWORD bytes_to_read = 50;
 	//unsigned char *pic_ptr = readBMP(buffer);
 	unsigned char *pal_ptr = read256BMPpallet(buffer);
 	unsigned char *pic_ptr2 = read256BMPdata(buffer);
-	
-	/*do {
-		ReadFile(hSerial, buffer, sizeof(buffer), &bytes_to_read , NULL);
-		printf("Read from USB:%s\n", buffer);
-	} while (1);*/
 	
 	int width = filewidth(buffer);	//800 -3 char
 	int height = fileheight(buffer);	//480 -3 char
 	
 	char start[3];
 	sprintf(start,"%03d", width);
-	if(!WriteFile(hSerial, &start, 3, &bytes_written, NULL))
+	write(fd, start, 3);
+	/*if(!WriteFile(hSerial, &start, 3, &bytes_written, NULL))
 	{
 		fprintf(stderr, "Error\n");
 		CloseHandle(hSerial);
 		return 1;
-	}
+	}*/
 	sprintf(start,"%03d", height);
-	if(!WriteFile(hSerial, &start, 3, &bytes_written, NULL))
+	write(fd,start,3);
+	/*if(!WriteFile(hSerial, &start, 3, &bytes_written, NULL))
 	{
 		fprintf(stderr, "Error\n");
 		CloseHandle(hSerial);
 		return 1;
-	}
+	}*/
+
 	/*
-	if(!WriteFile(hSerial, pic_ptr, width*height*3, &bytes_written, NULL))
-	{
-		fprintf(stderr, "Error\n");
-		CloseHandle(hSerial);
-		return 1;
-	} 
-	
 	int o;
 	for (o=0; o < width*height; o++){
 		printf("0x%x ", pic_ptr2[o]);
@@ -251,36 +238,20 @@ int main()
 		
 	}
 	*/
-	unsigned char *shortpic = malloc(sizeof(unsigned char)*(width*height*2));
+	unsigned char *shortpic = malloc(sizeof(char)*(width*height*2));
 	memset(shortpic,0,(width*height*2)*sizeof(unsigned char));
 	
 	int len = encode(pic_ptr2, width*height, shortpic);
-	printf("%x-%x-%x-%x", shortpic[0], pal_ptr[shortpic[1]], pal_ptr[shortpic[1]+1], pal_ptr[shortpic[1]+2]);
-	WriteFile(hSerial, pal_ptr, 768, &bytes_written, NULL);
-	Sleep(5);
-	WriteFile(hSerial, shortpic, len, &bytes_written, NULL);
+	printf("Encode finish, begin send");
+	//printf("%x-%x-%x-%x", shortpic[0], pal_ptr[shortpic[1]], pal_ptr[shortpic[1]+1], pal_ptr[shortpic[1]+2]);
+	//WriteFile(hSerial, pal_ptr, 768, &bytes_written, NULL);
+	write(fd, pal_ptr, 768);
+	write(fd, shortpic, len);
+	printf("Send finished, free memory");
+	//WriteFile(hSerial, shortpic, len, &bytes_written, NULL);
 	//WriteFile(hSerial, pic_ptr2, width*height, &bytes_written, NULL);
 	free(shortpic);
-	
-	/*
-	char termmi[3] = "end";
-	if(!WriteFile(hSerial, &termmi, 3, &bytes_written, NULL))
-	{
-		fprintf(stderr, "Error\n");
-		CloseHandle(hSerial);
-		return 1;
-	} 
-	*/
-	//free(pic_ptr2);
 	free(pal_ptr);
-    // Close serial port
-    fprintf(stderr, "Closing serial port...");
-    if (CloseHandle(hSerial) == 0)
-    {
-        fprintf(stderr, "Error\n");
-        return 1;
-    }
-    fprintf(stderr, "OK\n");
-    // exit normally
-    return 0;
+    free(pic_ptr2);
+	return 0;
 }
