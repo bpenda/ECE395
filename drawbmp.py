@@ -64,6 +64,7 @@ def drawScreen():
 
     draw = ImageDraw.Draw(img)
     img = img.convert(mode="P", colors=255)
+    img = img.rotate(270, expand=True)
     img.save("a_test.bmp")
     img.show()
 
