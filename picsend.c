@@ -49,7 +49,18 @@ unsigned char* read256BMPdata(char* filename){
 	unsigned char *data = malloc(sizeof(unsigned char)*size);
 	fread(data, sizeof(unsigned char), size, f); // read the 54-byte header
     fclose(f);
-	
+	int row=0, col=0;
+	//printf("w%d h%d", width, height);	
+	while (row*width+col < size/2){
+		unsigned char temp = data[row*width+col];
+		data[row*width+col] = data[(height-1-row)*width+col];
+		data[(height-1-row)*width+col] = temp;
+		col++;
+		if (col == width){
+			col = 0;
+			row++;
+		}
+	}
 	return data;
 }	
 
@@ -72,32 +83,7 @@ unsigned char* readBMP(char* filename)
     fread(data, sizeof(unsigned char), size, f); // read the rest of the data at once
 	//printf("%d %d\n", width, height);
     fclose(f);
-	/*
-	unsigned char* bitmap = malloc(sizeof(unsigned char) * width*height);
-	
-    for(i = 0; i < size; i += 3)
-    {
-		if (data[i] + data[i+1]+data[2+i] < 500)
-			bitmap[i/3] = 1;
-		else
-			bitmap[i/3] = 0;
-        unsigned char tmp = data[i];
-        data[i] = data[i+2];
-        data[i+2] = tmp;
-    }
-	for(i = 0; i < width*height; i+=8){
-		if (i % width == 0){}
-			//printf("\n");
-		int j;
-		unsigned char temp = 0;
-		for (j = 0; j < 8; j++)
-			temp |= bitmap[i+j] << (7-j);
-		//printf("0x%02x, ",temp);
-	}
-	
-	free(bitmap);	
-	*/
-    return data;
+	return data;
 }
 //return width of image
 int filewidth(char* filename){
@@ -193,61 +179,47 @@ set_interface_attribs (int fd, int speed, int parity)
 
 
 //Below is USB send code for Windows, not LINUX
-int main()
+int main( int argc, char *argv[] )
 {
-	char *portname = "/dev/ttyUSB1";
+	//char *portname = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A50285BI-if00-port0";
+	if (argc != 2){
+		perror("Enter filename to send");
+		exit(1);
+	}
+	char *portname = "/dev/rfcomm0";
 	int fd = open (portname, O_RDWR | O_NOCTTY | O_SYNC);
 	if (fd < 0){
 		perror("Error open USB port");
 		exit(1);
 	}
 	set_interface_attribs (fd, B115200, 0);  // set speed to 115,200 bps, 8n1 (no parity)
-	char buffer[50] = "./sampui.bmp";
+	//char buffer[50] = "./a_test.bmp";
 	//DWORD bytes_to_read = 50;
 	//unsigned char *pic_ptr = readBMP(buffer);
-	unsigned char *pal_ptr = read256BMPpallet(buffer);
-	unsigned char *pic_ptr2 = read256BMPdata(buffer);
+	unsigned char *pal_ptr = read256BMPpallet(argv[1]);
+	unsigned char *pic_ptr2 = read256BMPdata(argv[1]);
 	
-	int width = filewidth(buffer);	//800 -3 char
-	int height = fileheight(buffer);	//480 -3 char
+	int width = filewidth(argv[1]);	//800 -3 char
+	int height = fileheight(argv[1]);	//480 -3 char
 	
 	char start[3];
 	sprintf(start,"%03d", width);
 	write(fd, start, 3);
-	/*if(!WriteFile(hSerial, &start, 3, &bytes_written, NULL))
-	{
-		fprintf(stderr, "Error\n");
-		CloseHandle(hSerial);
-		return 1;
-	}*/
+	//WriteFile(hSerial, &start, 3, &bytes_written, NULL))
 	sprintf(start,"%03d", height);
 	write(fd,start,3);
-	/*if(!WriteFile(hSerial, &start, 3, &bytes_written, NULL))
-	{
-		fprintf(stderr, "Error\n");
-		CloseHandle(hSerial);
-		return 1;
-	}*/
-
-	/*
-	int o;
-	for (o=0; o < width*height; o++){
-		printf("0x%x ", pic_ptr2[o]);
-		if (o %width == 0)
-			printf("\n");
-		
-	}
-	*/
+	//WriteFile(hSerial, &start, 3, &bytes_written, NULL))
+	
 	unsigned char *shortpic = malloc(sizeof(char)*(width*height*2));
 	memset(shortpic,0,(width*height*2)*sizeof(unsigned char));
 	
 	int len = encode(pic_ptr2, width*height, shortpic);
-	printf("Encode finish, begin send");
+	printf("Encode finish, begin send\n");
 	//printf("%x-%x-%x-%x", shortpic[0], pal_ptr[shortpic[1]], pal_ptr[shortpic[1]+1], pal_ptr[shortpic[1]+2]);
 	//WriteFile(hSerial, pal_ptr, 768, &bytes_written, NULL);
 	write(fd, pal_ptr, 768);
 	write(fd, shortpic, len);
-	printf("Send finished, free memory");
+	printf("Send finished, free memory\n");
 	//WriteFile(hSerial, shortpic, len, &bytes_written, NULL);
 	//WriteFile(hSerial, pic_ptr2, width*height, &bytes_written, NULL);
 	free(shortpic);
