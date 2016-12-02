@@ -1,5 +1,15 @@
 import sys
 import struct
+import os
+
+
+SCREEN_SESSION = "mirror"
+USB_PATH = "/dev/tty.usbserial-A50285BI"
+BT_PATH = "/dev/tty.HC-06-DevB"
+UART_PATH = ''
+BAUD_RATE = 115200
+
+
 def pallet_256bmp(filename):
 	f = open(filename, 'r')
 	f.read(54)
@@ -44,6 +54,17 @@ def rlencode(data):
 	print "final len" + str(j)
 	return a
 
+def connectUART(path):
+    call("screen -S " + SCREEN_SESSION + " -d -m " + path + " " + str(BAUD_RATE), shell=True)
+    print 'sending to shell: '"screen -S " + SCREEN_SESSION + " -d -m " + path + " " + str(BAUD_RATE)
+
+def printUART(message):
+    call("screen -S " + SCREEN_SESSION + ' -p 0 -X stuff "' + message + '"', shell=True)
+
+def disconnectUART():
+    call("screen -S " + SCREEN_SESSION + " -X quit", shell=True)
+
+
 
 def main():
 	if len(sys.argv) != 2:
@@ -53,6 +74,14 @@ def main():
 	(width,height,data) = data_256bmp(sys.argv[1])
 	print len(data)
 	encode = rlencode(data)
+	if os.path.isfile(USB_PATH):
+		UART_PATH = USB_PATH
+	else:
+		UART_PATH = BT_PATH
+
+	connectUART(UART_PATH)
+	printUART(encode)
+	disconnectUART()
 	print "Picture sent"
 
 main()
