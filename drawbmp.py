@@ -4,7 +4,8 @@ from PIL import ImageDraw
 from PIL import ImageFont
 
 import server as serv
-
+import time 
+import os
 #CONSTS
 SCREEN = (480, 800)
 
@@ -23,12 +24,14 @@ font3 = ImageFont.truetype("fonts/2.otf",22)
 font4 = ImageFont.truetype(CLOCK_FONT_PATH,80)
 
 #DATA
+'''
 data = serv.getInfo()
 TIME = data["DateTime"].split()[1]
 DATE = data["DateTime"].split()[0]
 TEMP = str(data["Weather"][1]['temp'])[:2] + " F"
 WEAT = str(data["Weather"][0])
-print WEAT
+'''
+#print WEAT
 NEWS = "Today's Headlines:"
 #FUNCTION TO FORMAT HEADLINES. (Text goes off the screen, multiple lines, etc.)
 def formatNews(news):
@@ -46,26 +49,65 @@ def formatNews(news):
             para.append(head)
     return "-- " + "\n\n-- ".join(para)
 
-ALL_NEWS = formatNews(data["Headlines"][:3])
 
-def drawScreen():
-    img = Image.new("RGBA", SCREEN, BACKGROUND_COLOR)
-    draw = ImageDraw.Draw(img)
-    im = Image.open("weather/" + WEAT + ".png").convert('RGBA')
 
+def drawScreen(data):
+	img = Image.new("RGBA", SCREEN, BACKGROUND_COLOR)
+    #img = Image.new("RGBA")
+	draw = ImageDraw.Draw(img)
+
+	TIME = data["DateTime"].split()[1]
+	DATE = data["DateTime"].split()[0]
+	TEMP = str(data["Weather"][1]['temp'])[:2] + " F"
+	WEAT = str(data["Weather"][0])
+	ALL_NEWS = formatNews(data["Headlines"][:3])
+    
+	im = Image.open("weather/" + WEAT + ".png").convert('RGBA')    
     #DRAWING START
-    draw.text((20, 30),     TIME,   PRIMARY_TEXT,   font=font1)
-    draw.text((65, 170),    DATE,   PRIMARY_TEXT,   font=font2)
-    img.paste(im, (40,300), im)
-    draw.text((200, 300),    TEMP,   PRIMARY_TEXT,   font=font4)
-    draw.text((20, 500),    NEWS,   PRIMARY_TEXT,   font=font2)
-    draw.text((20, 550),    ALL_NEWS,   PRIMARY_TEXT,   font=font3)
+	draw.text((20, 30),     TIME,   PRIMARY_TEXT,   font=font1)
+	draw.text((65, 170),    DATE,   PRIMARY_TEXT,   font=font2)
+	img.paste(im, (40,300), im)
+	draw.text((200, 300),    TEMP,   PRIMARY_TEXT,   font=font4)
+	draw.text((20, 500),    NEWS,   PRIMARY_TEXT,   font=font2)
+	draw.text((20, 550),    ALL_NEWS,   PRIMARY_TEXT,   font=font3)
     #DRAWING END
 
-    draw = ImageDraw.Draw(img)
-    img = img.convert(mode="P", colors=255)
-    img = img.rotate(270, expand=True)
-    img.save("a_test.bmp")
-    img.show()
+	draw = ImageDraw.Draw(img)
+	img = img.convert(mode="P", colors=255)
+	img = img.rotate(90, expand=True)
+	img.save("a_test.bmp")
+    #img.show()
 
-drawScreen()
+#drawScreen()
+def drawTime(data):
+	img = Image.new("RGBA", (300,160), BACKGROUND_COLOR)
+	draw = ImageDraw.Draw(img)
+	TIME = data["DateTime"].split()[1]
+	draw.text((20, 30),     TIME,   PRIMARY_TEXT,   font=font1)
+	draw = ImageDraw.Draw(img)
+	img = img.convert(mode="P", colors=255)
+	img = img.rotate(90, expand=True)
+	img.save("a_test.bmp")
+	#img.show()
+#drawTime()
+#drawScreen()
+
+def update_mirror():
+	data = serv.getInfo()
+	drawScreen(data);
+	os.system("sudo ./main a_test.bmp 0 0")
+	a = 0
+	print "start"
+	while 1:
+		time.sleep(1)
+		data = serv.getInfo()
+		a +=1
+		if a % 240 == 0:		#update once every 4 hours
+			drawScreen(data)
+			os.system("sudo ./main a_test.bmp 0 0")
+		elif a % 60 == 0:
+			print "update"
+			drawTime(data)
+			os.system("sudo ./main a_test.bmp 0 0")
+
+update_mirror()
