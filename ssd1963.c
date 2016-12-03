@@ -186,7 +186,7 @@ void SSD1963_Init (void){
 	SSD1963_WriteData(((8) &0x0FF));
 	
 	SSD1963_WriteCommand(SSD1963_SET_DISPLAY_ON);		//SET display on
-
+	set_address_mode(0x02);
 	//set_backlight_ctrl();
 	//set_scroll_area(40, 400 ,39);
 	/*
