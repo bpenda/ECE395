@@ -243,22 +243,34 @@ void TIMER32_0_IRQHandler(void){
 }
 void recv_img_256bmg(){
 	uint8_t data1, data2, data3;
-	int width, height;
+	uint16_t width, height, startx, starty;
 	int idx = 0,k;
 	unsigned char palletr[256];
 	unsigned char palletg[256];
 	unsigned char palletb[256];
 	
 	int count = 0;
+	
 	data1 = getkey();
 	data2 = getkey();
-	data3 = getkey();
-	width = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	startx = data1 + (data2 << 8);
+	
 	data1 = getkey();
 	data2 = getkey();
-	data3 = getkey();
-	height = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
-	fast_draw_init(0,width-1, 0, height-1);
+	starty = data1 + (data2 << 8);
+	
+	data1 = getkey();
+	data2 = getkey();
+	width = data1 + (data2 << 8);
+	
+	data1 = getkey();
+	data2 = getkey();
+	height = data1 + (data2 << 8);
+	
+	
+	
+	
+	fast_draw_init(startx,width-1+startx, starty, height-1+starty);
 	
 	while (count < 256){
 		data1 = getkey();
@@ -290,12 +302,12 @@ void recv_img_24bmp(){
 	int count = 0;
 	data1 = getkey();
 	data2 = getkey();
-	data3 = getkey();
-	width = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	width = data1 + (data2 << 8);
+	
 	data1 = getkey();
 	data2 = getkey();
-	data3 = getkey();
-	height = (data1-'0')*100 + (data2-'0')*10 + data3-'0';
+	height = data1 + (data2 << 8);
+	
 	fast_draw_init(0,width -1, 0, height-1);
 	//SSD1963_SetArea(470,width+469,0,height-1);
 	//SSD1963_WriteCommand(SSD1963_WRITE_MEMORY_START);
@@ -334,9 +346,11 @@ int main()
 	//print_string_90("Supercalafajalistickespeealadojus", 0xFFFFFF,1.5,100,20,0x0);
 	//EXECUTION DOWN HERE
 	//SPECIAL NOTE!; ENTER IN PUTTY is '\r' not '\n'
-	recv_img_256bmg();
 	
-	while(1);
+	
+	while(1){
+		recv_img_256bmg();
+	}
 	//recv_bitmap();
 	//sprintf(str2,"Ms:%ld", ms);
 	
